@@ -46,7 +46,5 @@ pip install -r requirements.txt
 # Запуск сервера
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
-Скриншоты итерации 
-<img width="1019" height="305" alt="image" src="https://github.com/user-attachments/assets/f54e67b8-661b-48e5-aa89-f9428979f1c8" />
 
 
