@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, File, UploadFile, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, File, UploadFile, Form, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import sqlite3
 import os
@@ -8,19 +8,11 @@ from datetime import datetime
 
 app = FastAPI()
 
-# Папка для загруженных фото
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# Раздача статики: фронтенд и загруженные файлы
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
-# Путь к базе данных
 DB_PATH = "catches.db"
 
 def init_db():
-    """Создаёт таблицу, если её нет"""
     if not os.path.exists(DB_PATH):
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
@@ -35,14 +27,9 @@ def init_db():
         conn.commit()
         conn.close()
 
-# Инициализация БД при старте
 init_db()
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    """Отдаёт главную HTML-страницу"""
-    with open("frontend/index.html", "r", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+# === API ===
 
 @app.post("/api/catches")
 async def create_catch(
@@ -50,21 +37,17 @@ async def create_catch(
     length_cm: float = Form(...),
     photo: UploadFile = File(None)
 ):
-    """Сохраняет новый улов с фото (опционально)"""
     photo_path = None
     if photo and photo.filename:
-        # Проверка расширения
         ext = os.path.splitext(photo.filename)[1].lower()
         if ext not in (".jpg", ".jpeg", ".png", ".gif"):
-            return JSONResponse({"error": "Разрешены только JPG, PNG, GIF"}, status_code=400)
-        # Уникальное имя файла
+            return JSONResponse({"error": "Только JPG, PNG, GIF"}, status_code=400)
         filename = f"fish_{int(datetime.now().timestamp())}{ext}"
-        photo_path = os.path.join(UPLOAD_DIR, filename)
-        # Сохранение файла
-        with open(photo_path, "wb") as f:
+        photo_path = f"uploads/{filename}"  # ← ВСЕГДА с "uploads/"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(file_path, "wb") as f:
             shutil.copyfileobj(photo.file, f)
 
-    # Сохранение в БД
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
@@ -77,12 +60,66 @@ async def create_catch(
 
 @app.get("/api/catches")
 async def get_catches():
-    """Возвращает список всех уловов"""
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Позволяет обращаться по имени колонки
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT * FROM catches ORDER BY id DESC")
     rows = cur.fetchall()
     conn.close()
-    # Преобразуем в список словарей
     return JSONResponse([dict(row) for row in rows])
+
+@app.delete("/api/catches/{catch_id}")
+async def delete_catch(catch_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM catches WHERE id = ?", (catch_id,))
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Улов не найден")
+    conn.commit()
+    conn.close()
+    return {"status": "deleted"}
+
+@app.patch("/api/catches/{catch_id}")
+async def update_catch(
+    catch_id: int,
+    weight_kg: float = Form(...),
+    length_cm: float = Form(...),
+    photo: UploadFile = File(None)
+):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("SELECT photo_path FROM catches WHERE id = ?", (catch_id,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Улов не найден")
+    old_photo = row["photo_path"]
+    photo_path = old_photo
+
+    if photo and photo.filename:
+        # Удаляем старое фото
+        if old_photo and os.path.exists(old_photo):
+            os.remove(old_photo)
+        # Сохраняем новое
+        ext = os.path.splitext(photo.filename)[1].lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".gif"):
+            raise HTTPException(status_code=400, detail="Неверный формат фото")
+        filename = f"fish_{int(datetime.now().timestamp())}{ext}"
+        photo_path = f"uploads/{filename}"  # ← ВСЕГДА с "uploads/"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(photo.file, f)
+
+    cur.execute("""
+        UPDATE catches
+        SET weight_kg = ?, length_cm = ?, photo_path = ?
+        WHERE id = ?
+    """, (weight_kg, length_cm, photo_path, catch_id))
+    conn.commit()
+    conn.close()
+    return {"status": "updated"}
+
+# === Static files ===
+# ВАЖНО: порядок имеет значение!
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

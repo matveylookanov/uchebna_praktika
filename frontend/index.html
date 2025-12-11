@@ -2,79 +2,55 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>FishBook — Загрузка фото</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 700px; margin: 30px auto; padding: 0 15px; }
-        .form-group { margin: 12px 0; }
-        label { display: block; margin-bottom: 4px; font-weight: bold; }
-        input { width: 100%; padding: 8px; box-sizing: border-box; }
-        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; font-size: 16px; }
-        button:hover { background: #45a049; }
-        .catch-item { border: 1px solid #ccc; padding: 12px; margin: 10px 0; border-radius: 6px; }
-        .catch-item img { max-width: 120px; margin-top: 8px; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FishBook — Добавить улов</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>🐟 FishBook — Добавить улов</h1>
-    <form id="catchForm" enctype="multipart/form-data">
-        <div class="form-group">
-            <label>Вес рыбы (кг):</label>
-            <input type="number" name="weight_kg" step="0.1" required>
+    <header>
+        <div class="container">
+            <h1>🐟 FishBook</h1>
+            <a href="profile.html" class="profile-btn">Профиль</a>
         </div>
-        <div class="form-group">
-            <label>Длина рыбы (см):</label>
-            <input type="number" name="length_cm" step="0.1" required>
-        </div>
-        <div class="form-group">
-            <label>Фото рыбы:</label>
-            <input type="file" name="photo" accept="image/*">
-        </div>
-        <button type="submit">Сохранить улов</button>
-    </form>
+    </header>
 
-    <h2>Мои уловы</h2>
-    <div id="catches-list"></div>
-    <script>
-        document.getElementById('catchForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const weight = formData.get('weight_kg');
-            const length = formData.get('length_cm');
-            if (!weight || !length) {
-                alert('Укажите вес и длину');
-                return;
-            }
-            try {
-                const res = await fetch('/api/catches', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (res.ok) {
-                    loadCatches();
-                    e.target.reset();
-                } else {
-                    const err = await res.json();
-                    alert(err.error || 'Ошибка загрузки');
-                }
-            } catch (err) {
-                alert('Не удалось сохранить улов');
-            }
-        });
+    <main class="container">
+        <h2>Добавить улов</h2>
+        <form id="catchForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Фото рыбы</label>
+                <input type="file" name="photo" accept="image/*" id="photoInput">
+            </div>
+            <!-- Preview photo -->
+            <div id="photoPreview" class="photo-preview"></div>
 
-        async function loadCatches() {
-            const res = await fetch('/api/catches');
-            const catches = await res.json();
-            const container = document.getElementById('catches-list');
-            container.innerHTML = catches.map(c => 
-                `<div class="catch-item">
-                    <strong>Вес:</strong> ${c.weight_kg} кг<br>
-                    <strong>Длина:</strong> ${c.length_cm} см
-                    ${c.photo_path ? `<br><img src="/${c.photo_path}" alt="Рыба">` : ""}
-                </div>`
-            ).join("");
-        }
+            <div class="form-group">
+                <label>Вес рыбы (кг)</label>
+                <div class="slider-container">
+                    <input type="range" id="weightSlider" min="0.1" max="50" step="0.1" value="1">
+                    <div class="fill-bar" id="weightFill"></div>
+                </div>
+                <input type="number" id="weightInput" name="weight_kg" min="0.1" max="50" step="0.1" value="1" required>
+                <div class="slider-value" id="weightValue">1.0 кг</div>
+            </div>
 
-        loadCatches();
-    </script>
+            <div class="form-group">
+                <label>Длина рыбы (см)</label>
+                <div class="slider-container">
+                    <input type="range" id="lengthSlider" min="5" max="150" step="1" value="30">
+                    <div class="fill-bar" id="lengthFill"></div>
+                </div>
+                <input type="number" id="lengthInput" name="length_cm" min="5" max="150" step="1" value="30" required>
+                <div class="slider-value" id="lengthValue">30 см</div>
+            </div>
+            
+
+            <div id="message" class="message"></div>
+
+            <button type="submit">Сохранить улов</button>
+        </form>
+    </main>
+
+    <script src="script.js"></script>
 </body>
 </html>
